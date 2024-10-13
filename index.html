@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>記憶大考驗</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+        }
+        #game {
+            display: grid;
+            grid-template-columns: repeat(4, var(--card-size));
+            grid-gap: 10px;
+            margin-top: 20px;
+            display: none; /* Initially hide the game board */
+        }
+        .card {
+            width: var(--card-size);
+            height: var(--card-size);
+            perspective: 1000px;
+            cursor: pointer;
+        }
+        .card-inner {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+        .card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            user-select: none;
+        }
+        .card-front {
+            background-color: #4CAF50;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+        }
+        .card-back {
+            background-color: white;
+            transform: rotateY(180deg);
+            background-size: cover;
+        }
+        #message {
+            margin-top: 20px;
+            font-size: 24px;
+            display: none;
+        }
+        #startButton, #toggleButton, #themeButton {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin: 5px;
+        }
+        #startButton:hover, #toggleButton:hover, #themeButton:hover {
+            background-color: #1976D2;
+        }
+        #countdownSelect, #sizeSelect {
+            font-size: 18px; /* 調整字體大小 */
+            padding: 5px 10px; /* 增加內邊距 */
+        }
+    </style>
+</head>
+<body>
+
+<label for="countdownSelect">選擇倒數時間:</label>
+<select id="countdownSelect">
+    <option value="1">1 秒</option>
+    <option value="5" selected>5 秒</option>
+    <option value="10">10 秒</option>
+</select>
+
+<label for="sizeSelect">選擇遊戲大小:</label>
+<select id="sizeSelect">
+    <option value="2">2 x 2 小</option>
+    <option value="4" selected>4 x 4 中</option>
+    <option value="6">6 x 6 大</option>
+</select>
+
+<button id="themeButton">當前主題: 花</button>
+<button id="startButton">開始遊戲</button>
+<button id="toggleButton" style="display:none;">接露答案</button>
+<div id="countdown" style="display:none;"></div>
+<div id="game"></div>
+<div id="message"></div>
+
+<audio id="flipSound" src="https://www.soundjay.com/buttons/sounds/button-3.mp3"></audio>
+<audio id="matchSound" src="https://www.soundjay.com/buttons/sounds/button-17.mp3"></audio>
+<audio id="noMatchSound" src="https://www.soundjay.com/buttons/sounds/button-10.mp3"></audio>
+
+<script>
+    let currentTheme = 'flower'; // Default theme
+
+    const themes = {
+        flower: {
+            cardImages: [
+                'flower01.png', 'flower01.png', 
+                'flower02.png', 'flower02.png', 
+                'flower03.png', 'flower03.png', 
+                'flower04.png', 'flower04.png', 
+                'flower05.png', 'flower05.png', 
+                'flower06.png', 'flower06.png', 
+                'flower07.png', 'flower07.png', 
+                'flower08.png', 'flower08.png',
+                'flower09.png', 'flower09.png',
+                'flower10.png', 'flower10.png',
+                'flower11.png', 'flower11.png',
+                'flower12.png', 'flower12.png',
+                'flower13.png', 'flower13.png',
+                'flower14.png', 'flower14.png',
+                'flower15.png', 'flower15.png',
+                'flower16.png', 'flower16.png',
+                'flower17.png', 'flower17.png',
+                'flower18.png', 'flower18.png'
+            ],
+            cardSize: '150px'
+        },
+        bird: {
+            cardImages: [
+                'bird01.png', 'bird01.png', 
+                'bird02.png', 'bird02.png', 
+                'bird03.png', 'bird03.png', 
+                'bird04.png', 'bird04.png', 
+                'bird05.png', 'bird05.png', 
+                'bird06.png', 'bird06.png', 
+                'bird07.png', 'bird07.png', 
+                'bird08.png', 'bird08.png',
+                'bird09.png', 'bird09.png',
+                'bird10.png', 'bird10.png',
+                'bird11.png', 'bird11.png',
+                'bird12.png', 'bird12.png',
+                'bird13.png', 'bird13.png',
+                'bird14.png', 'bird14.png',
+                'bird15.png', 'bird15.png',
+                'bird16.png', 'bird16.png',
+                'bird17.png', 'bird17.png',
+                'bird18.png', 'bird18.png'
+            ],
+            cardSize: '150px'
+        }
+    };
+
+    function setTheme(theme) {
+        currentTheme = theme;
+        document.documentElement.style.setProperty('--card-size', themes[currentTheme].cardSize);
+        document.getElementById('themeButton').textContent = `當前主題: ${currentTheme === 'flower' ? '花' : '鳥'}`; // Update button text
+    }
+
+    setTheme(currentTheme); // Set initial theme
+
+    let firstCard = null;
+    let secondCard = null;
+    let lockBoard = false;
+    let matchedCards = 0;
+    let timeLeft; // Countdown time left
+    let countdownTimer; // Countdown timer reference
+
+    function shuffle(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+    }
+
+    function createBoard() {
+        const size = parseInt(document.getElementById('sizeSelect').value); // 獲取選擇的遊戲大小
+        const numberOfCards = size * size; // 卡片總數
+        const numberOfPairs = numberOfCards / 2; // 需要的配對數
+        const selectedImages = themes[currentTheme].cardImages.slice(0, numberOfPairs * 2); // 確保取出的圖片數量正確
+        shuffle(selectedImages); // 洗牌
+        
+        const gameBoard = document.getElementById('game');
+        gameBoard.innerHTML = ''; // 清空遊戲板
+        
+        // 根據選擇的大小創建卡牌
+        for (let i = 0; i < numberOfCards; i++) {
+            const image = selectedImages[i]; // 使用隨機圖片
+            const cardElement = document.createElement('div');
+            cardElement.classList.add('card');
+            cardElement.addEventListener('click', flipCard);
+        
+            const frontColor = currentTheme === 'bird' ? '#4CAF50' : '#D81B60'; // 綠色或粉色
+            cardElement.innerHTML = `
+                <div class="card-inner">
+                    <div class="card-front" style="background-color: ${frontColor};">?</div>
+                    <div class="card-back" style="background-image: url('${image}');"></div>
+                </div>
+            `;
+            gameBoard.appendChild(cardElement);
+        }
+    
+        // 設置遊戲板的列數
+        gameBoard.style.gridTemplateColumns = `repeat(${size}, var(--card-size))`;
+        gameBoard.style.display = 'grid'; // 顯示遊戲板
+    }
+
+    function flipAllCards() {
+        const cards = document.querySelectorAll('.card');
+        cards.forEach(card => {
+            card.classList.add('flipped');
+        });
+    }
+
+    function flipBackAllCards() {
+        const cards = document.querySelectorAll('.card');
+        cards.forEach(card => {
+            card.classList.remove('flipped');
+        });
+    }
+
+    function startCountdown() {
+        timeLeft = parseInt(document.getElementById('countdownSelect').value); // Get selected countdown time
+        const countdownDisplay = document.getElementById('countdown');
+        countdownDisplay.style.display = 'block';
+        countdownDisplay.textContent = `剩餘時間: ${timeLeft}秒`;
+
+        countdownTimer = setInterval(() => {
+            timeLeft--;
+            countdownDisplay.textContent = `剩餘時間: ${timeLeft}秒`;
+            if (timeLeft <= 0) {
+                clearInterval(countdownTimer);
+                flipBackAllCards(); // Flip cards back after countdown
+                countdownDisplay.style.display = 'none'; // Hide countdown
+                document.getElementById('toggleButton').style.display = 'inline-block'; // Show toggle button
+            }
+        }, 1000);
+    }
+
+    function startGame() {
+    matchedCards = 0; // Initialize matched cards count
+    createBoard(); // Create and display the game board
+    flipAllCards(); // Show all cards
+    startCountdown(); // Start the countdown timer
+    document.getElementById('themeButton').style.display = 'none'; // Hide the theme button
+
+    const size = parseInt(document.getElementById('sizeSelect').value);
+    const cardSize = size === 6 ? '100px' : size === 4 ? '150px' : '200px'; // 根據大小設定卡牌尺寸
+    document.documentElement.style.setProperty('--card-size', cardSize); // 設定卡牌大小
+
+    document.getElementById('countdownSelect').style.display = 'none'; // 隱藏倒數時間選擇
+    document.querySelector('label[for="countdownSelect"]').style.display = 'none'; // 隱藏倒數時間標籤
+
+    document.getElementById('sizeSelect').style.display = 'none'; // 隱藏大小選擇
+    document.querySelector('label[for="sizeSelect"]').style.display = 'none'; // 隱藏大小標籤
+}
+
+
+    function flipCard() {
+        if (lockBoard || this.classList.contains('flipped')) return;
+        
+        document.getElementById('flipSound').play(); // 播放翻牌音效
+        this.classList.add('flipped');
+
+        if (!firstCard) {
+            firstCard = this;
+            return;
+        }
+
+        secondCard = this;
+        lockBoard = true;
+
+        checkForMatch();
+    }
+
+    function checkForMatch() {
+        if (firstCard.querySelector('.card-back').style.backgroundImage ===
+            secondCard.querySelector('.card-back').style.backgroundImage) {
+            document.getElementById('matchSound').play(); // 播放配對成功音效
+            matchedCards += 2;
+            console.log(`已匹配卡片數: ${matchedCards}`); // 確認匹配數量
+            resetBoard();
+
+            if (matchedCards === parseInt(document.getElementById('sizeSelect').value) * parseInt(document.getElementById('sizeSelect').value)) {
+                console.log('所有卡片匹配，結束遊戲！'); // 確認進入結束遊戲
+                endGame();
+            }
+        } else {
+            setTimeout(() => {
+                firstCard.classList.remove('flipped');
+                secondCard.classList.remove('flipped');
+                resetBoard();
+            }, 1000);
+            document.getElementById('noMatchSound').play(); // 播放配對失敗音效
+        }
+    }
+
+    function resetBoard() {
+        [firstCard, secondCard] = [null, null];
+        lockBoard = false;
+    }
+
+    function endGame() {
+        clearInterval(countdownTimer); // Stop the countdown
+        const message = document.getElementById('message');
+        message.textContent = '遊戲結束！恭喜你！';
+        message.style.display = 'block'; // 顯示訊息
+        console.log('遊戲結束訊息已顯示'); // 確認結束訊息
+
+        const toggleButton = document.getElementById('toggleButton');
+        toggleButton.style.display = 'none'; // Hide the toggle button
+    }
+
+    document.getElementById('startButton').addEventListener('click', () => {
+        document.getElementById('startButton').style.display = 'none'; // Hide start button
+        startGame(); // Start the game
+    });
+
+    document.getElementById('toggleButton').addEventListener('click', () => {
+        const cards = document.querySelectorAll('.card');
+        const toggleButton = document.getElementById('toggleButton');
+
+        if (toggleButton.textContent === '接露答案') {
+            flipAllCards(); // Show all cards
+            toggleButton.textContent = '蓋上答案'; // Change button text
+        } else {
+            flipBackAllCards(); // Hide all cards
+            toggleButton.textContent = '接露答案'; // Change button text back
+        }
+    });
+
+    document.getElementById('themeButton').addEventListener('click', () => {
+        currentTheme = currentTheme === 'flower' ? 'bird' : 'flower'; // Toggle theme
+        setTheme(currentTheme); // Set the new theme
+    });
+</script>
+</body>
+</html>
